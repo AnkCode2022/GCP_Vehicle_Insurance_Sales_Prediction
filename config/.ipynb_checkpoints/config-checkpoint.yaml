@@ -1,0 +1,33 @@
+gcp:
+  project_id: "mlopsproject-493611"   # <-- add this
+  bucket_name: "mlops-bkt-1"
+  train_file: "data/train.csv"
+  test_file: "data/test.csv"
+
+paths:
+  train_local: "data/train.csv"
+  test_local: "data/test.csv"
+  processed_train: "artifacts/processed/train_processed.csv"
+  processed_test: "artifacts/processed/test_processed.csv"
+  # model_path: "models/model.pkl"
+  model_path: "gs://mlops-bkt-1/models/model.pkl"
+  metrics_path: "artifacts/metrics/metrics.json"
+
+model:
+  type: "xgboost"
+
+  xgboost:
+    n_estimators: 200
+    max_depth: 6
+    learning_rate: 0.1
+    subsample: 0.8
+    colsample_bytree: 0.8
+
+  # random_forest:
+  #   n_estimators: 100
+  #   max_depth: 5
+
+training:
+  test_size: 0.2
+  random_state: 42
+  threshold: 0.5   # can tune later

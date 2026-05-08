@@ -1,0 +1,164 @@
+{
+  "components": {
+    "comp-ingestion-component": {
+      "executorLabel": "exec-ingestion-component"
+    },
+    "comp-preprocessing-component": {
+      "executorLabel": "exec-preprocessing-component"
+    },
+    "comp-register-model-component": {
+      "executorLabel": "exec-register-model-component"
+    },
+    "comp-training-component": {
+      "executorLabel": "exec-training-component"
+    }
+  },
+  "deploymentSpec": {
+    "executors": {
+      "exec-ingestion-component": {
+        "container": {
+          "args": [
+            "--executor_input",
+            "{{$}}",
+            "--function_to_execute",
+            "ingestion_component"
+          ],
+          "command": [
+            "sh",
+            "-c",
+            "\nif ! [ -x \"$(command -v pip)\" ]; then\n    python3 -m ensurepip || python3 -m ensurepip --user || apt-get install python3-pip\nfi\n\nPIP_DISABLE_PIP_VERSION_CHECK=1 python3 -m pip install --quiet --no-warn-script-location 'google-cloud-storage'  &&  python3 -m pip install --quiet --no-warn-script-location 'kfp==2.16.0' '--no-deps' 'typing-extensions>=3.7.4,<5; python_version<\"3.9\"' && \"$0\" \"$@\"\n",
+            "sh",
+            "-ec",
+            "program_path=$(mktemp -d)\n\nprintf \"%s\" \"$0\" > \"$program_path/ephemeral_component.py\"\n_KFP_RUNTIME=true python3 -m kfp.dsl.executor_main                         --component_module_path                         \"$program_path/ephemeral_component.py\"                         \"$@\"\n",
+            "\nimport kfp\nfrom kfp import dsl\nfrom kfp.dsl import *\nfrom typing import *\n\ndef ingestion_component():\n    from google.cloud import storage\n\n    print(\"Starting ingestion...\")\n\n    client = storage.Client()\n    bucket = client.bucket(\"mlops-bkt-1\")\n\n    # Download raw data\n    bucket.blob(\"data/train.csv\").download_to_filename(\"/tmp/train.csv\")\n    bucket.blob(\"data/test.csv\").download_to_filename(\"/tmp/test.csv\")\n\n    # Upload to pipeline folder\n    bucket.blob(\"pipeline/train.csv\").upload_from_filename(\"/tmp/train.csv\")\n    bucket.blob(\"pipeline/test.csv\").upload_from_filename(\"/tmp/test.csv\")\n\n    print(\"Ingestion completed\")\n\n"
+          ],
+          "image": "python:3.10"
+        }
+      },
+      "exec-preprocessing-component": {
+        "container": {
+          "args": [
+            "--executor_input",
+            "{{$}}",
+            "--function_to_execute",
+            "preprocessing_component"
+          ],
+          "command": [
+            "sh",
+            "-c",
+            "\nif ! [ -x \"$(command -v pip)\" ]; then\n    python3 -m ensurepip || python3 -m ensurepip --user || apt-get install python3-pip\nfi\n\nPIP_DISABLE_PIP_VERSION_CHECK=1 python3 -m pip install --quiet --no-warn-script-location 'pandas' 'google-cloud-storage'  &&  python3 -m pip install --quiet --no-warn-script-location 'kfp==2.16.0' '--no-deps' 'typing-extensions>=3.7.4,<5; python_version<\"3.9\"' && \"$0\" \"$@\"\n",
+            "sh",
+            "-ec",
+            "program_path=$(mktemp -d)\n\nprintf \"%s\" \"$0\" > \"$program_path/ephemeral_component.py\"\n_KFP_RUNTIME=true python3 -m kfp.dsl.executor_main                         --component_module_path                         \"$program_path/ephemeral_component.py\"                         \"$@\"\n",
+            "\nimport kfp\nfrom kfp import dsl\nfrom kfp.dsl import *\nfrom typing import *\n\ndef preprocessing_component():\n    import pandas as pd\n    from google.cloud import storage\n\n    print(\"Starting preprocessing...\")\n\n    client = storage.Client()\n    bucket = client.bucket(\"mlops-bkt-1\")\n\n    # Download from GCS\n    bucket.blob(\"pipeline/train.csv\").download_to_filename(\"/tmp/train.csv\")\n    bucket.blob(\"pipeline/test.csv\").download_to_filename(\"/tmp/test.csv\")\n\n    def preprocess(df):\n        if 'id' in df.columns:\n            df = df.drop(columns=['id'])\n\n        df['Gender'] = df['Gender'].map({'Male': 1, 'Female': 0})\n        df['Vehicle_Damage'] = df['Vehicle_Damage'].map({'Yes': 1, 'No': 0})\n\n        df['Vehicle_Age'] = df['Vehicle_Age'].map({\n            '< 1 Year': 0,\n            '1-2 Year': 1,\n            '> 2 Years': 2\n        })\n\n        return df\n\n    train = pd.read_csv(\"/tmp/train.csv\")\n    test = pd.read_csv(\"/tmp/test.csv\")\n\n    train = preprocess(train)\n    test = preprocess(test)\n\n    train.to_csv(\"/tmp/train_processed.csv\", index=False)\n    test.to_csv(\"/tmp/test_processed.csv\", index=False)\n\n    # Upload processed files\n    bucket.blob(\"pipeline/train_processed.csv\").upload_from_filename(\"/tmp/train_processed.csv\")\n    bucket.blob(\"pipeline/test_processed.csv\").upload_from_filename(\"/tmp/test_processed.csv\")\n\n    print(\"Preprocessing completed\")\n\n"
+          ],
+          "image": "python:3.10"
+        }
+      },
+      "exec-register-model-component": {
+        "container": {
+          "args": [
+            "--executor_input",
+            "{{$}}",
+            "--function_to_execute",
+            "register_model_component"
+          ],
+          "command": [
+            "sh",
+            "-c",
+            "\nif ! [ -x \"$(command -v pip)\" ]; then\n    python3 -m ensurepip || python3 -m ensurepip --user || apt-get install python3-pip\nfi\n\nPIP_DISABLE_PIP_VERSION_CHECK=1 python3 -m pip install --quiet --no-warn-script-location 'google-cloud-aiplatform'  &&  python3 -m pip install --quiet --no-warn-script-location 'kfp==2.16.0' '--no-deps' 'typing-extensions>=3.7.4,<5; python_version<\"3.9\"' && \"$0\" \"$@\"\n",
+            "sh",
+            "-ec",
+            "program_path=$(mktemp -d)\n\nprintf \"%s\" \"$0\" > \"$program_path/ephemeral_component.py\"\n_KFP_RUNTIME=true python3 -m kfp.dsl.executor_main                         --component_module_path                         \"$program_path/ephemeral_component.py\"                         \"$@\"\n",
+            "\nimport kfp\nfrom kfp import dsl\nfrom kfp.dsl import *\nfrom typing import *\n\ndef register_model_component():\n    from google.cloud import aiplatform\n\n    print(\"Registering model...\")\n\n    aiplatform.init(\n        project=\"mlopsproject-493611\",\n        location=\"us-central1\"\n    )\n\n    model = aiplatform.Model.upload(\n        display_name=\"vehicle-insurance-model\",\n        artifact_uri=\"gs://mlops-bkt-1/models/\",\n        serving_container_image_uri=\"us-docker.pkg.dev/vertex-ai/prediction/xgboost-cpu.1-0:latest\"\n    )\n\n    print(\"Model registered:\", model.resource_name)\n\n"
+          ],
+          "image": "python:3.10"
+        }
+      },
+      "exec-training-component": {
+        "container": {
+          "args": [
+            "--executor_input",
+            "{{$}}",
+            "--function_to_execute",
+            "training_component"
+          ],
+          "command": [
+            "sh",
+            "-c",
+            "\nif ! [ -x \"$(command -v pip)\" ]; then\n    python3 -m ensurepip || python3 -m ensurepip --user || apt-get install python3-pip\nfi\n\nPIP_DISABLE_PIP_VERSION_CHECK=1 python3 -m pip install --quiet --no-warn-script-location 'pandas' 'scikit-learn' 'xgboost' 'google-cloud-storage'  &&  python3 -m pip install --quiet --no-warn-script-location 'kfp==2.16.0' '--no-deps' 'typing-extensions>=3.7.4,<5; python_version<\"3.9\"' && \"$0\" \"$@\"\n",
+            "sh",
+            "-ec",
+            "program_path=$(mktemp -d)\n\nprintf \"%s\" \"$0\" > \"$program_path/ephemeral_component.py\"\n_KFP_RUNTIME=true python3 -m kfp.dsl.executor_main                         --component_module_path                         \"$program_path/ephemeral_component.py\"                         \"$@\"\n",
+            "\nimport kfp\nfrom kfp import dsl\nfrom kfp.dsl import *\nfrom typing import *\n\ndef training_component():\n    import pandas as pd\n    from sklearn.model_selection import train_test_split\n    from sklearn.metrics import accuracy_score\n    from xgboost import XGBClassifier\n    import tempfile\n    from google.cloud import storage\n\n    print(\"Starting training...\")\n\n    client = storage.Client()\n    bucket = client.bucket(\"mlops-bkt-1\")\n\n    # Download processed data\n    bucket.blob(\"pipeline/train_processed.csv\").download_to_filename(\"/tmp/train.csv\")\n\n    df = pd.read_csv(\"/tmp/train.csv\")\n\n    X = df.drop(columns=[\"Response\"])\n    y = df[\"Response\"]\n\n    X_train, X_val, y_train, y_val = train_test_split(\n        X, y, test_size=0.2, random_state=42, stratify=y\n    )\n\n    model = XGBClassifier(n_estimators=100)\n    model.fit(X_train, y_train)\n\n    preds = model.predict(X_val)\n    print(\"Validation Accuracy:\", accuracy_score(y_val, preds))\n\n    # \u2705 Save model in XGBoost native format\n    with tempfile.NamedTemporaryFile(suffix=\".bst\") as tmp:\n        model.save_model(tmp.name)\n        bucket.blob(\"models/model.bst\").upload_from_filename(tmp.name)\n\n    print(\"Model saved to GCS (XGBoost format)\")\n\n"
+          ],
+          "image": "python:3.10"
+        }
+      }
+    }
+  },
+  "pipelineInfo": {
+    "name": "mlops-pipeline"
+  },
+  "root": {
+    "dag": {
+      "tasks": {
+        "ingestion-component": {
+          "cachingOptions": {
+            "enableCache": true
+          },
+          "componentRef": {
+            "name": "comp-ingestion-component"
+          },
+          "taskInfo": {
+            "name": "ingestion-component"
+          }
+        },
+        "preprocessing-component": {
+          "cachingOptions": {
+            "enableCache": true
+          },
+          "componentRef": {
+            "name": "comp-preprocessing-component"
+          },
+          "dependentTasks": [
+            "ingestion-component"
+          ],
+          "taskInfo": {
+            "name": "preprocessing-component"
+          }
+        },
+        "register-model-component": {
+          "cachingOptions": {
+            "enableCache": true
+          },
+          "componentRef": {
+            "name": "comp-register-model-component"
+          },
+          "dependentTasks": [
+            "training-component"
+          ],
+          "taskInfo": {
+            "name": "register-model-component"
+          }
+        },
+        "training-component": {
+          "cachingOptions": {
+            "enableCache": true
+          },
+          "componentRef": {
+            "name": "comp-training-component"
+          },
+          "dependentTasks": [
+            "preprocessing-component"
+          ],
+          "taskInfo": {
+            "name": "training-component"
+          }
+        }
+      }
+    }
+  },
+  "schemaVersion": "2.1.0",
+  "sdkVersion": "kfp-2.16.0"
+}

@@ -1,0 +1,17 @@
+pandas==2.2.2
+numpy==1.26.4
+scikit-learn==1.4.2
+joblib==1.3.2
+
+# Fix YAML
+PyYAML>=6.0.3
+
+# GCP (DO NOT pin old versions)
+google-cloud-storage>=3.7.0
+google-cloud-aiplatform==1.49.0
+
+# Required for KFP
+protobuf>=6.31.1,<7.0
+
+# Utilities
+tqdm>=4.67
